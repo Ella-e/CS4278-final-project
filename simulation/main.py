@@ -5,6 +5,15 @@ import sys
 import os
 import pybullet as p
 from stretch import *
+from navigation.Pose import *
+from navigation.slam import *
+from navigation.A_star import AStarPlanner
+from navigation.RRT import RRTPlanner
+from navigation.PRM import PRMPlanner
+from navigation.SmoothAstar import pathplanning
+
+
+from navigation.RobotController import RobotController
 
 p.connect(p.GUI)
 p.configureDebugVisualizer(p.COV_ENABLE_GUI, 1)
@@ -45,9 +54,124 @@ yaw=0
 
 mobot.get_observation()
 
+# numBody = p.getNumBodies()
+# print("Num Bodies: ", numBody)
+# Loop through all the bodies and get their info
+# for body_id in range(numBody):
+#     body_info = p.getBodyInfo(body_id)
+#     print("Body info: ", body_info)
+#     body_name = body_info[1].decode('utf-8')  # Decode byte string to normal string
+#     print(f"Body ID: {body_id}, Name: {body_name}")
+
+nav_obstacles_bounds = simple_slam(mobot, False)
+# print("nav_obstacles_bounds: ", nav_obstacles_bounds)
+
+# Test smoothAStar
+# goal = (2.8,0.1)
+# start = (1.6,-2.8)
+# goal = (2,2)
+# start = (0,0)
+# pathplanning(start=start, end=goal, image_path="slam.jpg", verbose=True)
+
+base_position, base_orientation = p.getBasePositionAndOrientation(mobot.robotId)
+start_base_pose = Pose(base_position, base_orientation)
+waypoints = [start_base_pose, Pose([1.7,-2.8,0.05], [0, 0, math.pi/2]), Pose([1.7,0.1,0.05], [0, 0, math.pi/2]), Pose([2.85,0.1,0.05], [0, 0, math.pi/2])]
+
+# First phase
+robot_size = 0.5 #sim_get_robot_size(mobot) 0.5
+nav_planner = AStarPlanner(
+    robot_size=robot_size,
+    obstacles_bounds=nav_obstacles_bounds,
+    resolution=0.05,
+    enable_plot=False,
+)
+
+path = nav_planner.plan(
+    start_pose=waypoints[0], goal_pose=waypoints[1]
+)
+
+mobotController = RobotController(mobot, waypoints[0], False)
+mobotController.sim_navigate_base(waypoints[1], path)
+
+# Second phase
+robot_size_2 = 0.2
+nav_planner_2 = AStarPlanner(
+    robot_size=robot_size_2,
+    obstacles_bounds=nav_obstacles_bounds,
+    resolution=0.05,
+    enable_plot=False,
+)
+
+path_2 = nav_planner_2.plan(
+    start_pose=waypoints[1], goal_pose=waypoints[2]
+)
+
+# Raise arm to a certain height to avoid collision with bed
+timestep = 0.01
+p.setJointMotorControl2(mobot.robotId,8,p.POSITION_CONTROL,targetPosition=0.5,force=100)
+for _ in range(1):
+    p.stepSimulation()
+    time.sleep(timestep)
+
+mobotController = RobotController(mobot, waypoints[1], True)
+mobotController.sim_navigate_base(waypoints[2], path_2)
+
+
+# Third phase
+path_3 = nav_planner.plan(
+    start_pose=waypoints[2], goal_pose=waypoints[3]
+)
+
+mobotController = RobotController(mobot, waypoints[2], False)
+mobotController.sim_navigate_base(waypoints[3], path_3)
+
+# nav_planner_2 = RRTPlanner(
+#     robot_size = robot_size_2,
+#     obstacles_bounds = nav_obstacles_bounds,
+#     enable_plot = True
+# )
+
+# nav_planner_2 = PRMPlanner(
+#     robot_size = robot_size_2,
+#     obstacles_bounds = nav_obstacles_bounds,
+#     enable_plot = True
+# )
+
+# Initialise Start Base pose
+# base_position, base_orientation = p.getBasePositionAndOrientation(mobot.robotId)
+# start_base_pose = Pose(base_position, base_orientation)
+# path = nav_planner_2.plan(
+#     start_pose=start_base_pose, goal_pose=goal_base_pose_2
+# )
+
+# Raise arm to a certain height to avoid collision with bed
+# timestep = 0.01
+# p.setJointMotorControl2(mobot.robotId,8,p.POSITION_CONTROL,targetPosition=0.6,force=100)
+# for _ in range(1):
+#     p.stepSimulation()
+#     time.sleep(timestep)
+
+# # Navigate to the goal along the path
+# mobotController = RobotController(mobot, start_base_pose)
+# mobotController.sim_navigate_base(goal_base_pose_2, path)
+
+time.sleep(5)
+
+# print("path:", path)
+
+
 while (1):
     time.sleep(1./240.)
     keys = p.getKeyboardEvents()
+    
+    pos, ori = p.getBasePositionAndOrientation(mobot.robotId)
+    print("pos_before_transform: ", pos)
+    print("ori_before_transform: ", ori)
+    
+    current_pose = Pose(pos, ori)
+    print("pos_after_transform: ", current_pose.get_position())
+    print("ori_after_transform_quaternion: ", current_pose.get_orientation("quaternion"))
+    print("euler: ", current_pose.get_orientation("euler"))
 
     for k,v in keys.items():
         # moving
@@ -122,6 +246,8 @@ while (1):
     base_control(mobot, p, forward, turn)
     arm_control(mobot, p, up, stretch, roll, yaw)
     gripper_control(mobot, p, gripper_open)
+    
+    p.stepSimulation()
    
     mobot.get_observation()
 
