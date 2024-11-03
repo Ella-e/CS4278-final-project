@@ -21,6 +21,9 @@ def init_scene(p, mug_random=False):
     ################ Robot
     mobot_urdf_file = os.path.join(root_dir,"resource/urdf/stretch/stretch.urdf")
     mobot = Robot(pybullet_api=p, start_pos=[-0.8,0.0,0.03], urdf_file=mobot_urdf_file)
+    # start position [-0.8,0.0,0.03]
+    # next start position [1.7,-2.8,0.03]
+    
 
     for _ in range(30):
         p.stepSimulation()
@@ -108,6 +111,8 @@ def init_scene(p, mug_random=False):
     urdf_dir = os.path.join(root_dir,"resource/urdf")
 
     table_z = p.getAABB(table_id)[1][2]
+    
+    ### cabinet on the wall
 
     cabinet2_position = [-1.5, 0.25, table_z+ 1.5]
     cabinet2_scaling = 0.7
@@ -168,6 +173,7 @@ def init_scene(p, mug_random=False):
     mass = 0
     bed_id = p.createMultiBody(mass, baseCollisionShapeIndex=bed_c, baseVisualShapeIndex=bed_v,
                                           basePosition=(bed_depth / 2.0 + 1.9, -1.45, bed_height / 2.0))
+    print("========:",bed_id)
     bed_color = [128 / 255.0, 128 / 255.0, 128 / 255.0, 1.0]
     p.changeVisualShape(bed_id, -1, rgbaColor=bed_color)
 
